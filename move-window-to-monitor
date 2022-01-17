@@ -1,0 +1,70 @@
+#!/bin/bash
+#
+# Autor: Marcus Orthbandt, www.mastro-it.de
+# Version: 2022-01-17
+#
+
+function stirb() {
+  echo "Moves active window to defined monitor of current desktop."
+  echo ""
+  echo "Usage:"
+  echo " $0 <number_of_monitor>";
+  echo " <number_of_monitor> correspond to the line number of <xrandr --listmonitors> incremented with 1."
+  echo ""
+  echo "Depends:"
+  echo " x11-xserver-utils, wmctrl and xdotool"
+  echo ""
+  echo "Return Codes:"
+  echo " 0 = success"
+  echo " 1 = error/help"
+  echo ""
+  exit 1;
+}
+
+monitor=$(($1 - 1));
+if [ $monitor -lt 0 ]; then  stirb; fi
+
+
+# Find Settings of Monitor
+read nummer m1 resolution m2 <<< $(xrandr --listmonitors | grep " $monitor: ")
+if [ "q$nummer" != "q$monitor:" ]; then stirb; fi
+
+# Find resolution and position of display on desktop
+screenx=$(echo $resolution | cut -d/ -f1)
+screeny=$(echo $resolution | cut -d/ -f2 | cut -dx -f2)
+screen_posx=$(echo $resolution | cut -d+ -f2 )
+screen_posy=$(echo $resolution | cut -d+ -f3 )
+
+# Get current active window.
+window_id=$(xdotool getactivewindow)
+
+# Remember if it was maximized.
+window_state=$(xprop -id $window_id _NET_WM_STATE | awk '{ print $3 }')
+
+# Find current size of window
+read m1 window_width <<< $(xwininfo -id $window_id | grep -E '^ +Width: ')
+read m1 window_height <<< $(xwininfo -id $window_id | grep -E '^ +Height: ')
+#echo $window_width $window_height
+
+# Set windowsize to maximum resolution of destination monitor, if destination monitor smaller
+if [ $window_width -gt $screenx ]; then window_width=$screenx; fi
+if [ $window_height -gt $screeny ]; then window_height=$screeny; fi
+
+# Calculate position to center window
+fposx=$(($screen_posx + $screenx/2 - $window_width/2))
+fposy=$(($screen_posy + $screeny/2 - $window_height/2))
+
+# Un-maximize current window so that we can move it
+wmctrl -ir $window_id -b remove,maximized_vert,maximized_horz
+
+# Resize and Move Window
+xdotool windowsize $window_id $window_width $window_height
+xdotool windowmove $window_id $fposx $fposy
+
+# Maximze if window was maximized
+if [[ "${window_state}" == _NET_WM_STATE_MAXIMIZED* ]]; then
+    wmctrl -ir $window_id -b add,maximized_vert,maximized_horz
+fi
+
+
+exit 0;
